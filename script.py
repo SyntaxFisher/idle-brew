@@ -1,8 +1,13 @@
 import time
 from datetime import datetime, timedelta
 import pyautogui
+import sys
 
-duration = int(input("Duration in minutes: "))
+if len(sys.argv) > 1:
+    duration = int(sys.argv[1])
+else:
+    duration = int(input("Duration in minutes: "))
+
 total_seconds = duration * 60
 
 start_time = datetime.now()
