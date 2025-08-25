@@ -5,25 +5,36 @@ import sys
 
 if len(sys.argv) > 1:
     duration = int(sys.argv[1])
+    total_seconds = duration * 60
+    unlimited = False
 else:
-    duration = int(input("Duration in minutes: "))
+    unlimited = True
 
-total_seconds = duration * 60
-
-start_time = datetime.now()
-end_time = start_time + timedelta(minutes=duration)
-print(f"Running for {duration} minutes, end time: {end_time.strftime('%H:%M')}")
+if not unlimited:
+    start_time = datetime.now()
+    end_time = start_time + timedelta(minutes=duration)
+    print(f"Running for {duration} minutes, end time: {end_time.strftime('%H:%M')}")
 
 try:
-    for i in range(1, total_seconds + 1):
-        print(f"\rProgress: {i}/{total_seconds} seconds", end="")
-        time.sleep(1)
-        pyautogui.press("space")
-        pyautogui.press("backspace")
-    print()
+    if unlimited:
+        i = 0
+        while True:
+            i += 1
+            print(f"\r{i} seconds", end="")
+            time.sleep(1)
+            pyautogui.press("space")
+            pyautogui.press("backspace")
+    else:
+        for i in range(1, total_seconds + 1):
+            print(f"\r{i}/{total_seconds} seconds", end="")
+            time.sleep(1)
+            pyautogui.press("space")
+            pyautogui.press("backspace")
+        print()
 except KeyboardInterrupt:
     print("\nSTOPPED BY USER")
 
-current_time = datetime.now().strftime("%H:%M")
-print(f"Script finished at {current_time}")
+if not unlimited:
+    current_time = datetime.now().strftime("%H:%M")
+    print(f"Script finished at {current_time}")
 print("Exiting...")
