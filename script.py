@@ -2,6 +2,7 @@ import time
 from datetime import datetime, timedelta
 import pyautogui
 import sys
+import math
 
 if len(sys.argv) > 1:
     duration = int(sys.argv[1])
@@ -17,11 +18,11 @@ if not unlimited:
 
 try:
     if unlimited:
-        i = 0
+        i = 50
         while True:
             i += 1
-            min = i % 60
-            sec = i - (min * 60)
+            min = math.floor(i / 60)
+            sec = i % 60
             print(f"\r{min} minutes, {sec} seconds", end="")
             time.sleep(1)
             pyautogui.press("space")
