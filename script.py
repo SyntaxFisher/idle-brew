@@ -18,7 +18,7 @@ if not unlimited:
 
 try:
     if unlimited:
-        i = 50
+        i = 0
         while True:
             i += 1
             min = math.floor(i / 60)
