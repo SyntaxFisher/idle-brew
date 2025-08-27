@@ -20,7 +20,9 @@ try:
         i = 0
         while True:
             i += 1
-            print(f"\r{i} seconds", end="")
+            min = i % 60
+            sec = i - (min * 60)
+            print(f"\r{min} minutes, {sec} seconds", end="")
             time.sleep(1)
             pyautogui.press("space")
             pyautogui.press("backspace")
