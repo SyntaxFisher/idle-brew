@@ -4,19 +4,16 @@ Keeps your Mac awake/active by wiggling the mouse one pixel every 30 seconds.
 
 ## Setup
 
-On a fresh machine, just run the launcher — it creates a virtualenv in
-`.venv/` and installs all dependencies automatically on first run:
+On a fresh machine, just run the launcher once:
 
 ```sh
 ./idle
 ```
 
-To make it available everywhere, install it onto your `PATH` (symlinks into
-`/opt/homebrew/bin` or `/usr/local/bin`):
-
-```sh
-./idle install
-```
+The first run sets up everything: it creates a virtualenv in `.venv/`,
+installs all dependencies, and symlinks `idle` onto your `PATH` (into
+`/opt/homebrew/bin` or `/usr/local/bin`) so you can call it from anywhere.
+`./idle install` re-creates the symlink if you ever need to.
 
 ## Usage
 
