@@ -1,8 +1,14 @@
 import time
 from datetime import datetime, timedelta
-import pyautogui
 import sys
 import math
+
+from AppKit import NSApplication, NSApplicationActivationPolicyProhibited
+
+# Hide the Python rocket icon from the Dock while the script runs
+NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyProhibited)
+
+import pyautogui
 
 if len(sys.argv) > 1:
     duration = int(sys.argv[1])
@@ -16,6 +22,10 @@ if not unlimited:
     end_time = start_time + timedelta(minutes=duration)
     print(f"Running for {duration} minutes, end time: {end_time.strftime('%H:%M')}")
 
+def wiggle_mouse():
+    pyautogui.moveRel(1, 0, _pause=False)
+    pyautogui.moveRel(-1, 0, _pause=False)
+
 try:
     if unlimited:
         i = 0
@@ -25,14 +35,14 @@ try:
             sec = i % 60
             print(f"\r{min} minutes, {sec} seconds", end="")
             time.sleep(1)
-            pyautogui.press("space")
-            pyautogui.press("backspace")
+            if i % 30 == 0:
+                wiggle_mouse()
     else:
         for i in range(1, total_seconds + 1):
             print(f"\r{i}/{total_seconds} seconds", end="")
             time.sleep(1)
-            pyautogui.press("space")
-            pyautogui.press("backspace")
+            if i % 30 == 0:
+                wiggle_mouse()
         print()
 except KeyboardInterrupt:
     print("\nSTOPPED BY USER")
