@@ -12,25 +12,31 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ ! -x "$VENV/bin/python" ]; then
-    echo "First run: creating virtualenv and installing dependencies..."
-    python3 -m venv "$VENV"
-    "$VENV/bin/pip" install --quiet --upgrade pip
-    "$VENV/bin/pip" install --quiet -r "$DIR/requirements.txt"
-    echo "Setup complete."
-fi
-
-if [ "${1:-}" = "install" ]; then
+install_global() {
     for target in /opt/homebrew/bin /usr/local/bin; do
         if [ -d "$target" ] && [ -w "$target" ]; then
             ln -sf "$DIR/idle" "$target/idle"
             echo "Installed: $target/idle -> $DIR/idle"
             echo "You can now run 'idle' from anywhere."
-            exit 0
+            return 0
         fi
     done
-    echo "error: no writable PATH directory found (tried /opt/homebrew/bin, /usr/local/bin)" >&2
-    exit 1
+    echo "warning: could not install global 'idle' command (no writable dir among /opt/homebrew/bin, /usr/local/bin)" >&2
+    return 1
+}
+
+if [ ! -x "$VENV/bin/python" ]; then
+    echo "First run: creating virtualenv and installing dependencies..."
+    python3 -m venv "$VENV"
+    "$VENV/bin/pip" install --quiet --upgrade pip
+    "$VENV/bin/pip" install --quiet -r "$DIR/requirements.txt"
+    install_global || true
+    echo "Setup complete."
+fi
+
+if [ "${1:-}" = "install" ]; then
+    install_global
+    exit $?
 fi
 
 exec "$VENV/bin/python" "$DIR/script.py" "$@"
