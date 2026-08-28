@@ -1,30 +1,40 @@
-# idle-typing
+# IdleTyping
 
-Keeps your Mac awake/active by wiggling the mouse one pixel every 30 seconds.
+A tiny macOS menu bar app that keeps your Mac looking active by wiggling the mouse cursor 1px every 30 seconds. No Dock icon, no windows — just a cursor icon in the menu bar.
 
-## Setup
+## Install
 
-On a fresh machine, just run the launcher once:
+Requires macOS 13+ and the Xcode Command Line Tools (`xcode-select --install`).
 
 ```sh
-./idle
+git clone https://github.com/SyntaxFisher/idle-typing.git
+cd idle-typing
+make
 ```
 
-The first run sets up everything: it creates a virtualenv in `.venv/`,
-installs all dependencies, and symlinks `idle` onto your `PATH` (into
-`/opt/homebrew/bin` or `/usr/local/bin`) so you can call it from anywhere.
-`./idle install` re-creates the symlink if you ever need to.
+This builds the app, installs it to `~/Applications`, and launches it. On first launch macOS immediately asks for **Accessibility** permission (needed to move the cursor): click *Open System Settings* and enable **IdleTyping** under Privacy & Security → Accessibility.
+
+If a previous CLI version of this repo was installed, `make` also cleans up its leftovers (the `idle` symlink in Homebrew's bin and the local Python venv) and warns if your shell config still references it.
 
 ## Usage
 
+The menu bar coffee-cup icon is white while inactive and green while idling. While the Accessibility permission is missing it shows an orange `!` badge instead (idling can't work without it).
+
+- **Left click** — toggles idling on/off.
+- **Right click** (or control-click) — opens the menu:
+  - **Start/Stop Idling**
+  - **Launch at Login** — registers the app as a login item.
+  - **Grant Accessibility…** — only shown while permission is missing; jumps to the right Settings pane.
+  - **Quit**
+
+If idling was on when the app quit, it resumes automatically on the next launch.
+
+## Rebuilding
+
+The app is ad-hoc signed, so after a **rebuild** (`make`) macOS may silently stop honoring the existing Accessibility grant even though it still shows as enabled. Fix: toggle IdleTyping off and on in Privacy & Security → Accessibility, or run `make reset-tcc` and relaunch to get prompted again. Day-to-day use without rebuilds is unaffected.
+
+## Uninstall
+
 ```sh
-idle          # run indefinitely (Ctrl+C to stop)
-idle 25       # run for 25 minutes
+make uninstall
 ```
-
-## Notes
-
-- Requires `python3` (`brew install python3` if missing).
-- The first mouse wiggle will prompt macOS for Accessibility permission
-  (System Settings → Privacy & Security → Accessibility); grant it to your
-  terminal app.
