@@ -12,9 +12,7 @@ cd idle-typing
 make
 ```
 
-This builds the app, installs it to `~/Applications`, and launches it. On first launch macOS immediately asks for **Accessibility** permission (needed to move the cursor): click *Open System Settings* and enable **IdleTyping** under Privacy & Security → Accessibility.
-
-If a previous CLI version of this repo was installed, `make` also cleans up its leftovers (the `idle` symlink in Homebrew's bin and the local Python venv) and warns if your shell config still references it.
+This builds the app, installs it to `/Applications`, and launches it. On first launch macOS immediately asks for **Accessibility** permission (needed to move the cursor): click *Open System Settings* and enable **IdleTyping** under Privacy & Security → Accessibility.
 
 ## Usage
 
@@ -31,10 +29,11 @@ If idling was on when the app quit, it resumes automatically on the next launch.
 
 ## Rebuilding
 
-The app is ad-hoc signed, so after a **rebuild** (`make`) macOS may silently stop honoring the existing Accessibility grant even though it still shows as enabled. Fix: toggle IdleTyping off and on in Privacy & Security → Accessibility, or run `make reset-tcc` and relaunch to get prompted again. Day-to-day use without rebuilds is unaffected.
-
-## Uninstall
+The app is ad-hoc signed, so after a **rebuild** (`make`) macOS may silently stop honoring the existing Accessibility grant even though it still shows as enabled. Fix: toggle IdleTyping off and on in Privacy & Security → Accessibility, or reset the permission and run `make` again:
 
 ```sh
-make uninstall
+tccutil reset Accessibility com.jona.idle-typing
+make
 ```
+
+Day-to-day use without rebuilds is unaffected. To uninstall, quit IdleTyping and delete it from `/Applications`.
