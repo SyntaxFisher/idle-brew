@@ -142,9 +142,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         image?.isTemplate = false
         statusItem.button?.image = image
-        statusItem.button?.toolTip = trusted
-            ? "Idle Brew — \(isIdling ? "idling" : "inactive")"
-            : "Idle Brew — Accessibility permission missing, idling won't work"
     }
 
     // TCC changes don't notify the app, so poll. If the grant disappears at any
