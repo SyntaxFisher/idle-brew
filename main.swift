@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import ServiceManagement
+import Sparkle
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let enabledKey = "idleEnabled"
@@ -9,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var timer: Timer?
     private var permissionTimer: Timer?
     private var lastTrusted: Bool?
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
 
     private var isIdling: Bool {
         get { UserDefaults.standard.bool(forKey: enabledKey) }
@@ -33,6 +36,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         updateIcon()
         startPermissionMonitor()
+        // Local ad-hoc builds stay independent of the public release channel.
+        if Bundle.main.object(forInfoDictionaryKey: "IBEnableUpdater") as? Bool == true {
+            updaterController.startUpdater()
+        }
     }
 
     @objc private func statusItemClicked() {
@@ -74,6 +81,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        if Bundle.main.object(forInfoDictionaryKey: "IBEnableUpdater") as? Bool == true {
+            let updates = NSMenuItem(title: "Check for Updates…",
+                                     action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+                                     keyEquivalent: "")
+            updates.target = updaterController
+            updates.isEnabled = updaterController.updater.canCheckForUpdates
+            menu.addItem(updates)
+
+            let automatic = NSMenuItem(title: "Automatic Updates",
+                                       action: #selector(toggleAutomaticUpdates), keyEquivalent: "")
+            automatic.target = self
+            automatic.state = updaterController.updater.automaticallyChecksForUpdates
+                && updaterController.updater.automaticallyDownloadsUpdates ? .on : .off
+            menu.addItem(automatic)
+            menu.addItem(.separator())
+        }
         // Routed through a local selector: macOS auto-assigns an icon to terminate:
         let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
@@ -109,6 +132,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func quitApp() {
         NSApp.terminate(nil)
+    }
+
+    @objc private func toggleAutomaticUpdates() {
+        let updater = updaterController.updater
+        let enabled = !(updater.automaticallyChecksForUpdates && updater.automaticallyDownloadsUpdates)
+        updater.automaticallyDownloadsUpdates = enabled
+        updater.automaticallyChecksForUpdates = enabled
     }
 
     @objc private func openAccessibilitySettings() {
