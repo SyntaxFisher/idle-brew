@@ -2,7 +2,7 @@
 
 files = [defines["app"]]
 symlinks = {"Applications": "/Applications"}
-hide_extensions = ["Idle Brew.app"]
+# Do not use hide_extensions: SetFile adds FinderInfo to the signed app bundle.
 format = "ULFO"
 filesystem = "APFS"
 background = None  # dmg-layout.py references artwork inside the signed app.
