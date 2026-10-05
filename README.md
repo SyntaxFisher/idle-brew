@@ -52,6 +52,8 @@ Day-to-day use without rebuilds is unaffected. To uninstall, quit Idle Brew and 
 
 ## Releasing
 
+Agents can use the repository's [release-idle-brew skill](.agents/skills/release-idle-brew/SKILL.md) for preparation, verification, publication, and recovery.
+
 Releases are built on a Mac using the signing certificate in its Keychain and Apple's notarization API. No signing secrets are uploaded to GitHub. Full Xcode (for `notarytool` and `stapler`), Python 3, and authenticated [GitHub CLI](https://cli.github.com/) access to this repository are required.
 
 ### One-time setup
