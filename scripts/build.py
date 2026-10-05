@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""Build and release tooling; app logic remains in main.swift. Invoke via make."""
+
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import plistlib
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import xml.etree.ElementTree as ET
+
+ROOT = Path(__file__).resolve().parents[1]
+BUILD = ROOT / "build"
+REPO = "SyntaxFisher/idle-brew"
+URL = f"https://github.com/{REPO}"
+ACCOUNT = "com.jona.idle-brew"
+SPARKLE_VERSION = "2.10.0"
+SPARKLE_SHA256 = "c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c"
+SPARKLE = BUILD / "dependencies" / f"sparkle-{SPARKLE_VERSION}"
+NS = {"sparkle": "http://www.andymatuschak.org/xml-namespaces/sparkle"}
+
+
+def run(*args, capture=False):
+    args = [str(arg) for arg in args]
+    print("+ " + " ".join(args), flush=True)
+    return subprocess.run(args, cwd=ROOT, check=True, text=True,
+                          stdout=subprocess.PIPE if capture else None).stdout
+
+
+def require(condition, message):
+    if not condition:
+        raise RuntimeError(message)
+
+
+def digest(path):
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest() if hasattr(hashlib, "file_digest") else hashlib.sha256(stream.read()).hexdigest()
+
+
+def metadata():
+    with (ROOT / "Info.plist").open("rb") as stream:
+        info = plistlib.load(stream)
+    require(re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", info["CFBundleShortVersionString"]),
+            "Use a three-part release version in Info.plist.")
+    require(re.fullmatch(r"[1-9][0-9]*", info["CFBundleVersion"]), "Use a positive integer build number.")
+    require(info["CFBundleIdentifier"] == ACCOUNT, "Do not change the bundle identity.")
+    return info
+
+
+def dependencies():
+    archive = SPARKLE.parent / f"Sparkle-{SPARKLE_VERSION}.tar.xz"
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    if not archive.exists():
+        temporary = archive.with_suffix(".download")
+        run("curl", "--fail", "--location", "--retry", "3", "--output", temporary,
+            f"https://github.com/sparkle-project/Sparkle/releases/download/{SPARKLE_VERSION}/{archive.name}")
+        require(digest(temporary) == SPARKLE_SHA256, "Sparkle checksum mismatch.")
+        temporary.replace(archive)
+    require(digest(archive) == SPARKLE_SHA256, "Cached Sparkle checksum mismatch.")
+    # Always extract the verified distribution instead of trusting cached executables.
+    if SPARKLE.exists():
+        shutil.rmtree(SPARKLE)
+    SPARKLE.mkdir()
+    run("tar", "-xJf", archive, "-C", SPARKLE)
+
+
+def sign(path, identity, release):
+    options = ["--options", "runtime", "--timestamp"] if release else ["--timestamp=none"]
+    run("codesign", "--force", "--sign", identity, *options, path)
+
+
+def build(info, release=False, identity="-"):
+    directory = BUILD / ("release" if release else "local")
+    app = directory / "Idle Brew.app"
+    if app.exists():
+        shutil.rmtree(app)
+    contents = app / "Contents"
+    for name in ("MacOS", "Resources", "Frameworks"):
+        (contents / name).mkdir(parents=True)
+    bundled_info = dict(info, IBEnableUpdater=release)
+    with (contents / "Info.plist").open("wb") as stream:
+        plistlib.dump(bundled_info, stream)
+    shutil.copy2(ROOT / "AppIcon.icns", contents / "Resources")
+    shutil.copy2(SPARKLE / "LICENSE", contents / "Resources" / "Sparkle-LICENSE.txt")
+    framework = contents / "Frameworks" / "Sparkle.framework"
+    run("ditto", SPARKLE / "Sparkle.framework", framework)
+    # This app is not sandboxed; Sparkle's sandbox XPC services are unnecessary.
+    shutil.rmtree(framework / "Versions/B/XPCServices")
+    (framework / "XPCServices").unlink()
+    architectures = ["arm64", "x86_64"] if release else [platform.machine()]
+    binaries = []
+    for arch in architectures:
+        binary = directory / f"IdleBrew-{arch}"
+        run("xcrun", "swiftc", "-O", "-target", f"{arch}-apple-macosx13.0",
+            "-F", SPARKLE, "-framework", "Sparkle", "-Xlinker", "-rpath",
+            "-Xlinker", "@executable_path/../Frameworks", ROOT / "main.swift", "-o", binary)
+        binaries.append(binary)
+    run("lipo", "-create", *binaries, "-output", contents / "MacOS/IdleBrew")
+    for component in (framework / "Versions/B/Autoupdate", framework / "Versions/B/Updater.app", framework, app):
+        sign(component, identity, release)
+    run("codesign", "--verify", "--deep", "--strict", "--verbose=2", app)
+    run("lipo", contents / "MacOS/IdleBrew", "-verify_arch", *architectures)
+    return app
+
+
+def local_configuration():
+    raw = os.environ.get("NOTARY_CONFIG")
+    config_path = Path(raw).expanduser() if raw else Path.home() / ".config/idle-brew-release/config.json"
+    if not config_path.is_file():
+        return {}
+    require(config_path.stat().st_mode & 0o077 == 0, "Notary config must have permissions 0600.")
+    return json.loads(config_path.read_text())
+
+
+def notary_auth():
+    profile = os.environ.get("NOTARY_PROFILE")
+    if profile:
+        return ["--keychain-profile", profile]
+    apple = local_configuration().get("apple", {})
+    require(all(apple.get(field) for field in ("key_path", "key_id", "issuer_id")),
+            "Configure Apple API credentials or set NOTARY_PROFILE (see README).")
+    key = Path(apple["key_path"]).expanduser()
+    require(key.is_file(), "The configured Apple API private key is missing.")
+    return ["--key", str(key), "--key-id", apple["key_id"], "--issuer", apple["issuer_id"]]
+
+
+def notarize(path, auth, output):
+    result = json.loads(run("xcrun", "notarytool", "submit", path, *auth,
+                            "--wait", "--timeout", "20m", "--output-format", "json", capture=True))
+    output.write_text(json.dumps(result, indent=2) + "\n")
+    require(result.get("status") == "Accepted", f"Notarization failed; inspect {output} and fetch the submission log.")
+    print(f"Apple accepted {path.name}: {result['id']}", flush=True)
+
+
+def clean_commit():
+    require(not run("git", "status", "--porcelain", capture=True).strip(),
+            "Commit all source changes before preparing or publishing a release.")
+    return run("git", "rev-parse", "HEAD", capture=True).strip()
+
+
+def verify_assets(directory, info):
+    feed = directory / "appcast.xml"
+    run(SPARKLE / "bin/sign_update", "--account", ACCOUNT, "--verify", feed)
+    item = ET.parse(feed).find("channel/item")
+    require(item is not None, "Appcast has no release.")
+    require(item.findtext("sparkle:version", namespaces=NS) == info["CFBundleVersion"], "Appcast build mismatch.")
+    enclosure = item.find("enclosure")
+    name = f"Idle-Brew-{info['CFBundleShortVersionString']}-macOS-universal.dmg"
+    require(enclosure.get("url") == f"{URL}/releases/download/v{info['CFBundleShortVersionString']}/{name}",
+            "Appcast download URL mismatch.")
+    require(int(enclosure.get("length")) == (directory / name).stat().st_size, "DMG size mismatch.")
+    run(SPARKLE / "bin/sign_update", "--account", ACCOUNT, "--verify", directory / name,
+        enclosure.get("{" + NS["sparkle"] + "}edSignature"))
+
+
+def release(info):
+    commit = clean_commit()
+    auth = notary_auth()
+    identity = os.environ.get("SIGN_IDENTITY") or local_configuration().get("signing", {}).get("identity")
+    require(identity and identity.startswith("Developer ID Application:"), "Set SIGN_IDENTITY to your Developer ID Application certificate.")
+    public_key = run(SPARKLE / "bin/generate_keys", "--account", ACCOUNT, "-p", capture=True).strip()
+    require(public_key == info["SUPublicEDKey"], "Sparkle signing key does not match Info.plist.")
+    version = info["CFBundleShortVersionString"]
+    notes = ROOT / "releases" / f"{version}.md"
+    require(notes.is_file() and notes.read_text().strip(), "Write release notes before building.")
+    directory = BUILD / "releases" / version
+    require(not directory.exists(), f"Release directory already exists: {directory}. Preserve completed artifacts; move aside failed builds before retrying.")
+    directory.mkdir(parents=True)
+    # Keep older feed entries so raising minimum macOS later does not strand users.
+    releases = json.loads(run("gh", "release", "list", "--repo", REPO, "--exclude-drafts",
+                             "--exclude-pre-releases", "--json", "tagName,isLatest", capture=True))
+    latest = next((item for item in releases if item["isLatest"]), None)
+    if latest:
+        run("gh", "release", "download", latest["tagName"], "--repo", REPO,
+            "--pattern", "appcast.xml", "--dir", directory)
+        run(SPARKLE / "bin/sign_update", "--account", ACCOUNT, "--verify", directory / "appcast.xml")
+        previous = ET.parse(directory / "appcast.xml").findall("channel/item")
+        require(all(int(item.findtext("sparkle:version", namespaces=NS)) < int(info["CFBundleVersion"]) for item in previous),
+                "CFBundleVersion must increase with every release.")
+    app = build(info, release=True, identity=identity)
+    archive = BUILD / "release/notarization.zip"
+    archive.unlink(missing_ok=True)
+    run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", app, archive)
+    notarize(archive, auth, directory / "app-notarization.json")
+    run("xcrun", "stapler", "staple", app)
+    run("xcrun", "stapler", "validate", app)
+    run("spctl", "--assess", "--type", "execute", "--verbose=2", app)
+    stage = BUILD / "release/dmg"
+    if stage.exists():
+        shutil.rmtree(stage)
+    stage.mkdir()
+    run("ditto", app, stage / app.name)
+    (stage / "Applications").symlink_to("/Applications")
+    dmg = directory / f"Idle-Brew-{version}-macOS-universal.dmg"
+    run("hdiutil", "create", "-volname", "Idle Brew", "-srcfolder", stage,
+        "-fs", "APFS", "-format", "ULFO", dmg)
+    sign(dmg, identity, release=True)
+    notarize(dmg, auth, directory / "dmg-notarization.json")
+    run("xcrun", "stapler", "staple", dmg)
+    run("xcrun", "stapler", "validate", dmg)
+    run("codesign", "--verify", "--strict", "--verbose=2", dmg)
+    run("spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=2", dmg)
+    shutil.copy2(notes, directory / dmg.with_suffix(".md").name)
+    run(SPARKLE / "bin/generate_appcast", "--account", ACCOUNT, "--maximum-deltas", "0",
+        "--download-url-prefix", f"{URL}/releases/download/v{version}/", "--embed-release-notes",
+        "--link", URL, directory)
+    verify_assets(directory, info)
+    assets = [dmg, directory / "appcast.xml"]
+    checksums = directory / "SHA256SUMS"
+    checksums.write_text("".join(f"{digest(path)}  {path.name}\n" for path in assets))
+    assets.append(checksums)
+    manifest = {"commit": commit, "version": version, "build": info["CFBundleVersion"],
+                "assets": {path.name: digest(path) for path in assets}}
+    (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    print(f"Verified release ready: {directory}\nPublish with make MODE=publish", flush=True)
+
+
+def publish(info):
+    commit = clean_commit()
+    version = info["CFBundleShortVersionString"]
+    directory = BUILD / "releases" / version
+    manifest = json.loads((directory / "manifest.json").read_text())
+    require(manifest["commit"] == commit and manifest["build"] == info["CFBundleVersion"],
+            "Source changed since release preparation; build a new release.")
+    for name, checksum in manifest["assets"].items():
+        require(digest(directory / name) == checksum, f"Release asset changed: {name}")
+    verify_assets(directory, info)
+    remote = run("git", "ls-remote", "origin", "refs/heads/main", capture=True).split()
+    require(remote and remote[0] == commit, "Push the release commit to origin/main before publishing.")
+    tag = f"v{version}"
+    existing = json.loads(run("gh", "release", "list", "--repo", REPO, "--limit", "100",
+                             "--json", "tagName,isDraft", capture=True))
+    matching = next((item for item in existing if item["tagName"] == tag), None)
+    require(not matching or matching["isDraft"], "This version is already public; never replace a published release.")
+    local_tag = run("git", "tag", "--list", tag, capture=True).strip()
+    if local_tag:
+        require(run("git", "rev-list", "-n", "1", tag, capture=True).strip() == commit, "Tag points to a different commit.")
+    else:
+        run("git", "tag", "-a", tag, "-m", f"Idle Brew {version}")
+    run("git", "push", "origin", f"refs/tags/{tag}")
+    if not matching:
+        run("gh", "release", "create", tag, "--repo", REPO, "--verify-tag", "--draft",
+            "--title", f"Idle Brew {version}", "--notes-file", ROOT / "releases" / f"{version}.md")
+    run("gh", "release", "upload", tag, "--repo", REPO, "--clobber",
+        *(directory / name for name in manifest["assets"]))
+    # Verify GitHub's stored bytes while the release is still a draft.
+    with tempfile.TemporaryDirectory(prefix="idle-brew-release-") as temporary:
+        run("gh", "release", "download", tag, "--repo", REPO, "--dir", temporary)
+        for name, checksum in manifest["assets"].items():
+            require(digest(Path(temporary) / name) == checksum, f"Remote checksum mismatch: {name}")
+    run("gh", "release", "edit", tag, "--repo", REPO, "--draft=false", "--latest")
+    print(f"Published {URL}/releases/tag/{tag}", flush=True)
+
+
+def main():
+    mode = os.environ.get("MODE", "install")
+    require(mode in {"install", "build", "release", "publish"}, "MODE must be install, build, release, or publish.")
+    info = metadata()
+    dependencies()
+    if mode == "release":
+        release(info)
+    elif mode == "publish":
+        publish(info)
+    else:
+        app = build(info)
+        if mode == "install":
+            subprocess.run(["pkill", "-x", "IdleBrew"], check=False)
+            destination = Path("/Applications") / app.name
+            if destination.exists():
+                shutil.rmtree(destination)
+            run("ditto", app, destination)
+            run("open", destination)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (RuntimeError, subprocess.CalledProcessError, OSError, ValueError, KeyError) as error:
+        sys.exit(f"Error: {error}")

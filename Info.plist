@@ -15,7 +15,7 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>1.0.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
@@ -23,6 +23,22 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>IBEnableUpdater</key>
+    <true/>
+    <key>SUFeedURL</key>
+    <string>https://github.com/SyntaxFisher/idle-brew/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>8aXiQQsz6yHG+APf1GD1RypPICyGwjYcAAuWUb8IGD4=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>3600</integer>
+    <key>SUVerifyUpdateBeforeExtraction</key>
+    <true/>
+    <key>SURequireSignedFeed</key>
     <true/>
 </dict>
 </plist>
