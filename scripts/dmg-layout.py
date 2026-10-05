@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import sys
+import subprocess
 
 import dmgbuild
 from ds_store import DSStore
@@ -17,6 +18,7 @@ def configure_background(event):
         mount = next(Path(item["mount-point"]) for item in event["output"]["system-entities"]
                      if "mount-point" in item)
     if event.get("type") == "operation::finished" and event.get("operation") == "dsstore::create":
+        subprocess.run(["codesign", "--verify", "--deep", "--strict", str(mount / app.name)], check=True)
         artwork = mount / app.name / "Contents/Resources/InstallerBackground.tiff"
         if not artwork.is_file():
             raise RuntimeError("Installer artwork must be bundled before signing the app.")
