@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Idle Brew"
+  short_description: "Build, verify, and publish signed Idle Brew DMGs"
+  default_prompt: "Use $release-idle-brew to prepare and verify the next Idle Brew release, then publish it when authorized."
