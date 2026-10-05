@@ -1,96 +1,57 @@
 # Idle Brew
 
-A tiny macOS menu bar app that keeps your Mac looking active by wiggling the mouse cursor 1px every 30 seconds. No Dock icon, no windows — just a coffee-cup icon in the menu bar.
+Keep your Mac looking active with a tiny app that lives in your menu bar. Idle Brew moves the pointer one pixel and back every 30 seconds while enabled.
+
+[Download the latest release](https://github.com/SyntaxFisher/idle-brew/releases/latest)
+
+## Features
+
+- Start or stop with one click on the menu bar icon.
+- See at a glance whether idling is active.
+- Optionally launch when you sign in to your Mac.
+- Resume idling on the next launch if it was enabled when you quit.
+- Receive automatic updates, with the option to turn them off.
+
+## Requirements
+
+- macOS 13 or later, on Apple silicon or Intel.
+- Accessibility permission, which lets Idle Brew move the pointer.
 
 ## Install
 
-Requires macOS 13 or later, on Apple silicon or Intel.
-
 1. Download the DMG from the [latest release](https://github.com/SyntaxFisher/idle-brew/releases/latest).
 2. Open it and drag **Idle Brew** to **Applications**.
-3. Launch Idle Brew from Applications and allow it in **System Settings → Privacy & Security → Accessibility**.
+3. Launch Idle Brew from Applications.
+4. Allow it in **System Settings → Privacy & Security → Accessibility**.
 
-The release app and DMG are Developer ID signed, notarized by Apple, and stapled. The installed app checks GitHub for updates hourly and downloads updates automatically. Updates normally install when the app quits; Sparkle can prompt to restart if the app stays open. Right-click the menu bar icon to check immediately or turn off automatic updates. Run the app from Applications, since it cannot update itself inside the read-only DMG.
+The release app and installer are signed with Developer ID and notarized by Apple. Idle Brew appears in the menu bar; it has no main window or Dock icon.
 
-## Build from source
+## Use
 
-Requires the Xcode Command Line Tools (`xcode-select --install`), Python 3, and internet access for the pinned Sparkle dependency.
+**Click the coffee-cup icon** to start or stop idling. It is green while active and white while inactive. An orange warning means Accessibility permission is missing.
 
-```sh
-git clone https://github.com/SyntaxFisher/idle-brew.git
-cd idle-brew
-make
-```
+**Right-click or Control-click the icon** to open the menu. From there you can start or stop idling, enable **Launch at Login**, manage updates, or quit. If permission is missing, choose **Grant Accessibility…** to open the relevant settings.
 
-This compiles `main.swift` directly with `swiftc`, bundles and ad-hoc signs the app, installs it to `/Applications`, and launches it. There is no Xcode project or Swift package. Local builds have the public updater disabled so a release does not overwrite development work. Use `make MODE=build` to build and verify without installing.
+If you revoke Accessibility permission, idling stops. After granting it again, click the icon to restart.
 
-## Usage
+## Privacy and permissions
 
-The menu bar coffee-cup icon is white while inactive and green while idling. While the Accessibility permission is missing it shows an orange `!` badge instead (idling can't work without it).
+Idle Brew uses Accessibility access to move the pointer. Your preferences are stored on your Mac. Release builds contact GitHub to check for and download updates.
 
-- **Left click** — toggles idling on/off.
-- **Right click** (or control-click) — opens the menu:
-  - **Start/Stop Idling**
-  - **Launch at Login** — registers the app as a login item.
-  - **Grant Accessibility…** — only shown while permission is missing; jumps to the right Settings pane.
-  - **Check for Updates…** — checks for a new GitHub release (release builds).
-  - **Automatic Updates** — enables or disables automatic checking and installation (release builds).
-  - **Quit**
+## Updates and uninstall
 
-If idling was on when the app quit, it resumes automatically on the next launch.
+The app checks for updates hourly and downloads them automatically. Updates normally install when you quit; you may also be offered a restart. Use **Check for Updates…** to check immediately or turn off **Automatic Updates** in the menu.
 
-## Rebuilding
+Run Idle Brew from Applications so it can update itself.
 
-Local builds are ad-hoc signed, so after a **rebuild** (`make`) macOS may silently stop honoring the existing Accessibility grant even though it still shows as enabled. Switching from a local build to the signed release may also need a fresh grant. Fix: toggle Idle Brew off and on in Privacy & Security → Accessibility, or reset the permission and relaunch:
+To uninstall, turn off **Launch at Login** if enabled, quit Idle Brew, and delete it from Applications.
 
-```sh
-tccutil reset Accessibility com.jona.idle-brew
-make
-```
+## Support
 
-Day-to-day use without rebuilds is unaffected. To uninstall, quit Idle Brew and delete it from `/Applications`.
+[Open an issue](https://github.com/SyntaxFisher/idle-brew/issues/new) with your macOS version, Mac model, app version, and what happened. For a pointer that does not move, check Accessibility permission first.
 
-## Releasing
+If you built the app yourself or switched from a local build to a release, see [Accessibility after rebuilding](docs/development.md#rebuilding).
 
-Agents can use the repository's [release-idle-brew skill](.agents/skills/release-idle-brew/SKILL.md) for preparation, verification, publication, and recovery.
+## Development
 
-Releases are built on a Mac using the signing certificate in its Keychain and Apple's notarization API. No signing secrets are uploaded to GitHub. Full Xcode (for `notarytool` and `stapler`), Python 3, and authenticated [GitHub CLI](https://cli.github.com/) access to this repository are required.
-
-### One-time setup
-
-Install a **Developer ID Application** certificate and its private key in the login Keychain. Check it with `security find-identity -v -p codesigning`.
-
-Create `~/.config/idle-brew-release/config.json` with permissions `0600`:
-
-```json
-{
-  "apple": {
-    "key_id": "YOUR_APP_STORE_CONNECT_API_KEY_ID",
-    "issuer_id": "YOUR_ISSUER_ID",
-    "key_path": "/absolute/private/path/AuthKey_KEYID.p8"
-  },
-  "signing": {
-    "identity": "Developer ID Application: Your Name (TEAM_ID)"
-  }
-}
-```
-
-The API key must support notarization. The same team API configuration used for another app can be reused via `NOTARY_CONFIG=/path/to/config.json`; supply `SIGN_IDENTITY` if it does not include `signing.identity`. Alternatively use `NOTARY_PROFILE` for credentials saved by `xcrun notarytool store-credentials`, together with `SIGN_IDENTITY`.
-
-Sparkle's update signing key is stored in the login Keychain under account `com.jona.idle-brew`. Its public key is committed in `Info.plist`. Back up the private key securely using Sparkle's `generate_keys --account com.jona.idle-brew -x /private/backup/path`, and import it on another release Mac with `-f`. Never create a replacement key casually, commit it, or put it in release assets. Changing this key or the Apple signing team requires a planned migration.
-
-### Each release
-
-1. Increase `CFBundleShortVersionString` (three parts, e.g. `1.0.1`) and `CFBundleVersion` (strictly increasing integer) in `Info.plist`.
-2. Write user-facing notes in `releases/<version>.md`.
-3. Run `make MODE=build`, review the change, commit with a conventional commit, and push to `origin/main`.
-4. Run `make MODE=release`. It builds both architectures, signs the app and Sparkle helpers with Hardened Runtime and timestamps, notarizes and staples the app and DMG, checks Gatekeeper, and generates and verifies an EdDSA-signed appcast.
-5. Review `build/releases/<version>/` and test the app from the DMG. Run `make MODE=publish` to tag the exact source commit, upload the DMG, `appcast.xml`, and `SHA256SUMS` to a draft GitHub release, download and compare their bytes, then publish it as latest.
-
-`make` remains the only public Make target; `MODE` selects the operation. Publication uses the already verified artifacts and refuses changed source or artifacts and existing public versions. Failed builds stay on disk for diagnosis; move their version directory aside before rebuilding. Notarization results, the source manifest, and the app bundle are retained locally, while only the DMG, update feed, and checksums are uploaded.
-
-Every release must include its signed `appcast.xml`, because installed apps use GitHub's `releases/latest/download/appcast.xml`. Keep earlier release assets available for feed history. Do not manually edit the signed feed after generating it. A plain GitHub release without these assets is not an update.
-
-The build pins [Sparkle](https://sparkle-project.org/documentation/) 2.10.0 and verifies its distribution SHA-256 before extraction. Update its version and checksum together in `scripts/build.py`. Sparkle's license is included in the app bundle. Apple's [notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow) describes the signing and ticket requirements.
-
-The DMG uses a plain grey background, a drag instruction, and an arrow between Idle Brew and Applications. `scripts/dmg-background.swift` draws the artwork at standard and Retina resolutions; it is bundled inside the app before signing so no loose image appears in the installer. `scripts/dmg-settings.py` and `scripts/dmg-layout.py` set the Finder layout. Release packaging installs the hash-pinned tools in `scripts/dmg-requirements.txt` into an isolated environment under `build/dependencies/`.
+See [build instructions](docs/development.md) and the [release guide](docs/releasing.md).
