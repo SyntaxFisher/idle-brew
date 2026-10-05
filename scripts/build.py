@@ -74,6 +74,21 @@ def sign(path, identity, release):
     run("codesign", "--force", "--sign", identity, *options, path)
 
 
+def create_dmg(app, dmg):
+    """Package the signed app with an explicit drag-to-Applications layout."""
+    environment = BUILD / "dependencies/dmg-tools"
+    python = environment / "bin/python"
+    if not python.exists():
+        run(sys.executable, "-m", "venv", environment)
+    requirements = ROOT / "scripts/dmg-requirements.txt"
+    stamp = environment / ".requirements-sha256"
+    if not stamp.exists() or stamp.read_text().strip() != digest(requirements):
+        run(python, "-m", "pip", "--disable-pip-version-check", "install",
+            "--require-hashes", "--only-binary=:all:", "-r", requirements)
+        stamp.write_text(digest(requirements) + "\n")
+    run(python, ROOT / "scripts/dmg-layout.py", app, dmg)
+
+
 def build(info, release=False, identity="-"):
     directory = BUILD / ("release" if release else "local")
     app = directory / "Idle Brew.app"
@@ -87,6 +102,11 @@ def build(info, release=False, identity="-"):
         plistlib.dump(bundled_info, stream)
     shutil.copy2(ROOT / "AppIcon.icns", contents / "Resources")
     shutil.copy2(SPARKLE / "LICENSE", contents / "Resources" / "Sparkle-LICENSE.txt")
+    if release:
+        artwork = BUILD / "dmg-artwork"
+        run("xcrun", "swift", ROOT / "scripts/dmg-background.swift", artwork)
+        run("tiffutil", "-cathidpicheck", artwork / "installer.png", artwork / "installer@2x.png",
+            "-out", contents / "Resources/InstallerBackground.tiff")
     framework = contents / "Frameworks" / "Sparkle.framework"
     run("ditto", SPARKLE / "Sparkle.framework", framework)
     # This app is not sandboxed; Sparkle's sandbox XPC services are unnecessary.
@@ -190,15 +210,8 @@ def release(info):
     run("xcrun", "stapler", "staple", app)
     run("xcrun", "stapler", "validate", app)
     run("spctl", "--assess", "--type", "execute", "--verbose=2", app)
-    stage = BUILD / "release/dmg"
-    if stage.exists():
-        shutil.rmtree(stage)
-    stage.mkdir()
-    run("ditto", app, stage / app.name)
-    (stage / "Applications").symlink_to("/Applications")
     dmg = directory / f"Idle-Brew-{version}-macOS-universal.dmg"
-    run("hdiutil", "create", "-volname", "Idle Brew", "-srcfolder", stage,
-        "-fs", "APFS", "-format", "ULFO", dmg)
+    create_dmg(app, dmg)
     sign(dmg, identity, release=True)
     notarize(dmg, auth, directory / "dmg-notarization.json")
     run("xcrun", "stapler", "staple", dmg)
