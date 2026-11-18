@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build and release tooling; app logic remains in main.swift. Invoke via make."""
 
+import argparse
 import hashlib
 import json
 import os
@@ -270,7 +271,21 @@ def publish(info):
     print(f"Published {URL}/releases/tag/{tag}", flush=True)
 
 
+USAGE = """\
+environment:
+  MODE              install (default), build, release, or publish
+  SIGN_IDENTITY     Developer ID Application identity for release
+  NOTARY_CONFIG     notarization config (default ~/.config/idle-brew-release/config.json)
+  NOTARY_PROFILE    notarytool keychain profile, instead of NOTARY_CONFIG
+
+install builds, installs to /Applications and launches; build only builds.
+release signs, notarizes and packages; publish uploads that release to GitHub.
+See docs/releasing.md."""
+
+
 def main():
+    argparse.ArgumentParser(usage="make [MODE=<mode>]", description=__doc__, epilog=USAGE,
+                            formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     mode = os.environ.get("MODE", "install")
     require(mode in {"install", "build", "release", "publish"}, "MODE must be install, build, release, or publish.")
     info = metadata()
