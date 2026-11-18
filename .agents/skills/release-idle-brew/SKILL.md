@@ -5,7 +5,7 @@ description: "Prepare, verify, publish, or troubleshoot Idle Brew's signed and n
 
 # Release Idle Brew
 
-Use the existing `make` workflow from the repository root. Read [AGENTS.md](../../../AGENTS.md), the [Releasing section of README.md](../../../README.md#releasing), and the current [release script](../../../scripts/build.py) before changing the workflow. The script is the source of truth for supported options; do not create a second release implementation in this skill.
+Use the existing `make` workflow from the repository root. Read [AGENTS.md](../../../AGENTS.md), the [release guide](../../../docs/releasing.md), and the current [release script](../../../scripts/build.py) before changing the workflow. The script is the source of truth for supported options; do not create a second release implementation in this skill.
 
 ## Scope and identity
 
@@ -19,9 +19,9 @@ Use the existing `make` workflow from the repository root. Read [AGENTS.md](../.
 
 Check existing setup before asking for credentials: `gh auth status`, `security find-identity -v -p codesigning`, and `xcrun --find notarytool`. The release needs full Xcode, Python 3, GitHub CLI access to the repository, and the certificate's private key in the login Keychain.
 
-The established Developer ID identity is `Developer ID Application: Jona Bihl (94DW6CHJD7)`. Confirm its current validity. `~/.config/idle-brew-release/config.json` (permissions `0600`) contains `signing.identity` and `apple.key_id`, `apple.issuer_id`, and `apple.key_path`. Resolve the key from the local configuration; do not embed private-key contents or tokens in this repository, tool output, or release assets. See README for `SIGN_IDENTITY`, `NOTARY_CONFIG`, and `NOTARY_PROFILE` alternatives.
+Use the established Developer ID identity from `signing.identity` in the local configuration and confirm its current validity. `~/.config/idle-brew-release/config.json` (permissions `0600`) contains `signing.identity` and `apple.key_id`, `apple.issuer_id`, and `apple.key_path`. Resolve the key from the local configuration; do not embed private-key contents or tokens in this repository, tool output, or release assets. See the release guide for `SIGN_IDENTITY`, `NOTARY_CONFIG`, and `NOTARY_PROFILE` alternatives.
 
-Sparkle's EdDSA private key is in the login Keychain under account `com.jona.idle-brew`; `SUPublicEDKey` in `Info.plist` is its public counterpart. Reuse the existing key. Missing access is not a reason to generate a replacement. Consult README for secure backup/import and plan any key rotation separately.
+Sparkle's EdDSA private key is in the login Keychain under account `com.jona.idle-brew`; `SUPublicEDKey` in `Info.plist` is its public counterpart. Reuse the existing key. Missing access is not a reason to generate a replacement. Consult the release guide for secure backup/import and plan any key rotation separately.
 
 If a signing command pauses on a macOS Keychain prompt for `generate_appcast` or `sign_update`, ask the user to approve the actual system prompt and keep the command pending. Synthetic clicks cannot answer it; do not try to route around the prompt. An approval for one tool or invocation may not cover another prompt.
 
